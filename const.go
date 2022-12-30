@@ -25,3 +25,15 @@ type DistinctBucket struct {
 	Key      string `json:"key"`
 	DocCount int    `json:"doc_count"`
 }
+
+const (
+	/** date histogram interval type  https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-bucket-datehistogram-aggregation.html **/
+
+	DateHistogramIntervalMinute  = "minute"
+	DateHistogramIntervalHour    = "hour"
+	DateHistogramIntervalDay     = "day"
+	DateHistogramIntervalWeek    = "week"
+	DateHistogramIntervalMonth   = "month"
+	DateHistogramIntervalQuarter = "quarter"
+	DateHistogramIntervalYear    = "year"
+)

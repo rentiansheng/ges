@@ -2,6 +2,7 @@ package ges
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -257,5 +258,136 @@ func TestDelete(t *testing.T) {
 	cnt, err = es.Count(ctx)
 	require.NoError(t, err, "es count docs error")
 	require.Equal(t, uint64(0), cnt, "es count docs error")
+
+}
+
+func TestTranslateSQL(t *testing.T) {
+	deferFn, err := esInitTest(t)
+	defer deferFn()
+	require.NoError(t, err, "es init error")
+
+	suits := []struct {
+		name   string
+		sql    string
+		result string
+		prefix string
+		suffix string
+	}{
+		{
+			name:   "select *",
+			sql:    "select * from test_index",
+			result: `{"size":1000,"_source":{"includes":["tid"],"excludes":[]},"docvalue_fields":[{"field":"label"}],"sort":[{"_doc":{"order":"asc"}}]}`,
+		},
+		{
+			name:   "count",
+			sql:    "select count(*) from test_index",
+			result: `{"size":0,"_source":false,"stored_fields":"_none_","sort":[{"_doc":{"order":"asc"}}],"track_total_hits":2147483647}`,
+		},
+		{
+			name:   "order by",
+			sql:    "select  * from test_index order by tid desc",
+			result: `{"size":1000,"_source":{"includes":["tid"],"excludes":[]},"docvalue_fields":[{"field":"label"}],"sort":[{"tid":{"order":"desc","missing":"_first","unmapped_type":"integer"}}]}`,
+		},
+		{
+			name:   "group by",
+			sql:    "select count(tid) from test_index group by tid",
+			prefix: `{"size":0,"_source":false,"stored_fields":"_none_","aggregations":{"groupby":{"composite":{"size":1000,"sources":[{"31de1189":{"terms":{"field":"tid","missing_bucket":true,"order":"asc"}}}]},"aggregations":`,
+			suffix: `{"filter":{"exists":{"field":"tid","boost":1.0}}}}}}}`,
+		},
+	}
+
+	for idx, suit := range suits {
+		res, err := ES().TranslateSQL(ctx, suit.sql)
+		require.NoError(t, err, "es translate test suit %d name %s sql error", idx, suit.name)
+		if suit.result != "" {
+			require.Equal(t, suit.result, string(res), "es translate test suit %d name %s sql error", idx, suit.name)
+		}
+		if suit.prefix != "" {
+			require.Contains(t, string(res), suit.prefix, "es translate test suit %d name %s sql error", idx, suit.name)
+		}
+		if suit.suffix != "" {
+			require.Contains(t, string(res), suit.suffix, "es translate test suit %d name %s sql error", idx, suit.name)
+		}
+	}
+}
+
+func TestRawSQL(t *testing.T) {
+	deferFn, err := esInitTest(t)
+	defer deferFn()
+	require.NoError(t, err, "es init error")
+
+	es := ES().IndexName(indexName)
+	docs := []interface{}{
+		mapStrAny{"tid": int32(1), "label": "tid-1"},
+		mapStrAny{"tid": int32(2), "label": "tid-2"},
+		mapStrAny{"tid": int32(3), "label": "tid-3"},
+	}
+	err = es.Save(ctx, docs...)
+	require.NoError(t, err, "es save docs error")
+
+	sql := "select * from " + indexName
+	var result interface{}
+	err = ES().RawSQL(ctx, sql, &result)
+	require.NoError(t, err, "es RawSQL docs error")
+	strResult := `{"columns":[{"name":"label","type":"keyword"},{"name":"tid","type":"integer"}],"rows":[["tid-1",1],["tid-2",2],["tid-3",3]]}`
+	actual, _ := json.Marshal(result)
+	require.Equal(t, strResult, string(actual))
+}
+
+func TestQuery(t *testing.T) {
+	deferFn, err := esInitTest(t)
+	defer deferFn()
+	require.NoError(t, err, "es init error")
+
+	es := ES().IndexName(indexName)
+	docs := []interface{}{
+		mapStrAny{"tid": int32(1), "label": "tid-1"},
+		mapStrAny{"tid": int32(2), "label": "tid-2"},
+		mapStrAny{"tid": int32(3), "label": "tid-3"},
+	}
+	err = es.Save(ctx, docs...)
+	require.NoError(t, err, "es save docs error")
+	searchDSL := map[string]interface{}{
+		"query": map[string]interface{}{
+			"bool": map[string]interface{}{
+				"must": []interface{}{
+					map[string]interface{}{"terms": map[string]interface{}{"tid": []int32{1, 3}}},
+				},
+			},
+		},
+		"sort": []map[string]interface{}{
+			{"tid": map[string]interface{}{"order": "asc"}},
+		},
+		"_source": []string{"tid", "label"},
+	}
+	result := struct {
+		TimeOut bool        `json:"time_out"`
+		Error   interface{} `json:"error"`
+		Hits    struct {
+			Total struct {
+				Value    uint64 `json:"value"`
+				Relation string `json:"relation"`
+			}
+			MaxScore  float64 `json:"max_score"`
+			IndexHits []struct {
+				Index  string              `json:"_index"`
+				Type   string              `json:"_type"`
+				Id     string              `json:"_id"`
+				Score  float64             `json:"_score"`
+				Source testIndexMappingRow `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}{}
+	err = es.Query(ctx, searchDSL, &result)
+	require.NoError(t, err, "es query error")
+	require.Equal(t, nil, result.Error)
+	require.Equal(t, 2, len(result.Hits.IndexHits))
+	if len(result.Hits.IndexHits) == 2 {
+		require.Equal(t, int64(1), result.Hits.IndexHits[0].Source.Id)
+		require.Equal(t, "tid-1", result.Hits.IndexHits[0].Source.Label)
+		require.Equal(t, int64(3), result.Hits.IndexHits[1].Source.Id)
+		require.Equal(t, "tid-3", result.Hits.IndexHits[1].Source.Label)
+
+	}
 
 }

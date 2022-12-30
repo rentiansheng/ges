@@ -3,7 +3,6 @@ package ges
 import (
 	"context"
 	"encoding/json"
-	"io"
 )
 
 /***************************
@@ -35,19 +34,19 @@ type Client interface {
 	Fields(...string) Client
 	Search(ctx context.Context, result interface{}) (uint64, error)
 	GetById(ctx context.Context, id string, result interface{}) error
-	RawSQL(ctx context.Context, closer io.ReadCloser, result interface{}) (uint64, error)
+	RawSQL(ctx context.Context, sql string, result interface{}) error
+	TranslateSQL(ctx context.Context, sql string) ([]byte, error)
 	Count(ctx context.Context) (uint64, error)
 	Save(ctx context.Context, data ...interface{}) error
 	USave(ctx context.Context, docs ...Document) error
 	UpdateById(ctx context.Context, id string, data interface{}) error
-	// TODO map[string]interface{} to interface api
 	MUpdateById(ctx context.Context, docs ...Document) error
-	// TODO map[string]interface{} to interface api
 	MUpsertById(ctx context.Context, docs ...Document) error
 	UpsertById(ctx context.Context, id string, doc interface{}) error
 	// Delete delete_by_query
 	Delete(ctx context.Context) error
 	DeleteById(ctx context.Context, ids ...string) error
+	Query(ctx context.Context, raw interface{}, result interface{}) error
 }
 
 type Filter interface {
@@ -75,7 +74,7 @@ type Agg interface {
 	DateHistogram(field, interval, format, offset, timeZone string) Agg
 	Distinct(field string, number int64) Agg
 	Filter(agg Agg, filter ...AggFilter) Agg
-	//Metric(...AggDateHistogramMetric) Agg
+	Raw(interface{}) Agg
 	Result() (string, interface{})
 }
 
@@ -140,12 +139,6 @@ type SQLResult struct {
 type SQLColumn struct {
 	Name string `json:"name"`
 	Type string `json:"type"`
-}
-
-type MultiUpdate interface {
-	Filter(filter map[string]interface{}) MultiUpdate
-	Doc(doc map[string]interface{}) MultiUpdate
-	Get() (filter map[string]interface{}, doc map[string]interface{})
 }
 
 type IndexMeta struct {

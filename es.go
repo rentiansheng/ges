@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"reflect"
 	"strings"
 	"time"
@@ -200,16 +201,38 @@ func (e es) buildQuery(ctx context.Context) (*bytes.Buffer, error) {
 	return queryBody, nil
 }
 
-func (e es) TranslateSQL(ctx context.Context, sql string) (bytes.Buffer, error) {
-	//TODO implement me
-	panic("implement me")
+func (e es) TranslateSQL(ctx context.Context, sql string) ([]byte, error) {
+	res, err := rawESClient.SQL.Translate(
+		strings.NewReader(fmt.Sprintf(`{"query": "%s"}`, sql)),
+		rawESClient.SQL.Translate.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if res.IsError() {
+		return nil, fmt.Errorf(res.String())
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
-func (e es) RawSQL(ctx context.Context, closer io.ReadCloser, result interface{}) (uint64, error) {
-	//TODO implement me
-	panic("implement me")
+// RawSQL
+func (e es) RawSQL(ctx context.Context, sql string, result interface{}) error {
+	//https://www.elastic.co/guide/en/elasticsearch/reference/current/sql-search-api.html
+	res, err := rawESClient.SQL.Query(strings.NewReader(fmt.Sprintf(`{"query":"%s"}`, sql)), rawESClient.SQL.Query.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	if res.IsError() {
+		return fmt.Errorf(res.String())
+	}
+
+	return json.NewDecoder(res.Body).Decode(result)
 }
 
+// GetById get document by id
 func (e es) GetById(ctx context.Context, id string, result interface{}) error {
 
 	res, err := rawESClient.GetSource(
@@ -225,7 +248,7 @@ func (e es) GetById(ctx context.Context, id string, result interface{}) error {
 
 }
 
-// UpdateById
+// UpdateById update document by id
 func (e es) UpdateById(ctx context.Context, id string, data interface{}) error {
 	bufferBody := bytes.NewBufferString(fmt.Sprintf(`{"update": {"_id": "%s"}}`, id))
 	bufferBody.WriteString("\n")
@@ -253,7 +276,7 @@ func (e es) UpdateById(ctx context.Context, id string, data interface{}) error {
 	return nil
 }
 
-// MUpdateById
+// MUpdateById  multiple update document by id
 func (e es) MUpdateById(ctx context.Context, docs ...Document) error {
 	bufferBody := &bytes.Buffer{}
 
@@ -416,9 +439,25 @@ func (e es) Count(ctx context.Context) (uint64, error) {
 	return e.Search(ctx, &result)
 }
 
-func (e es) Query(ctx context.Context) (map[string]interface{}, error) {
-	//TODO implement me
-	panic("implement me")
+// Query raw dsl query
+func (e es) Query(ctx context.Context, raw interface{}, result interface{}) error {
+	body := &bytes.Buffer{}
+	if err := json.NewEncoder(body).Encode(raw); err != nil {
+		return err
+	}
+	opts := []func(*esapi.SearchRequest){
+		rawESClient.Search.WithBody(body),
+		rawESClient.Search.WithContext(ctx),
+		rawESClient.Search.WithIndex(e.indexName),
+	}
+	res, err := rawESClient.Search(opts...)
+	if err != nil {
+		return err
+	}
+	if res.IsError() {
+		return fmt.Errorf(res.String())
+	}
+	return json.NewDecoder(res.Body).Decode(result)
 }
 
 func (e es) Fields(fields ...string) Client {
