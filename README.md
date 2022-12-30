@@ -16,68 +16,64 @@ simple elasticsearch orm
 
 ## build aggregator condition 
 ### agg 
-```go
-type Agg interface {
-	Name(string) Agg
-	DateHistogram(field, interval, format, offset, timeZone string) Agg
-	Distinct(field string, number int64) Agg
-	Filter(agg Agg, filter ...AggFilter) Agg
- 	Result() (string, interface{})
-}
+```html
+Name(string) Agg
+DateHistogram(field, interval, format, offset, timeZone string) Agg
+Distinct(field string, number int64) Agg
+Filter(agg Agg, filter ...AggFilter) Agg
+Result() (string, interface{})
 ```
 
 ### aggregator filter 
-```go
-type AggFilter interface {
-	Name(string) AggFilter
-	Terms(field string, val ...interface{}) AggFilter
-	TermsArray(field string, val interface{}) AggFilter
+```html
+Name(string) AggFilter
+Terms(field string, val ...interface{}) AggFilter
+TermsArray(field string, val interface{}) AggFilter
 
-	Result() (string, map[string]interface{})
-}
+Result() (string, map[string]interface{})
 ```
 
 ## elastic search query 
 
 
 ### index 
-```go
+```html
 Exists(ctx context.Context) (bool, error)
-	Create(ctx context.Context, mapping IndexMeta) error
-	List(ctx context.Context) ([]error, error)
-	Mapping(ctx context.Context) (map[string]indexMetaResp, error)
+Create(ctx context.Context, mapping IndexMeta) error
+List(ctx context.Context) ([]error, error)
+Mapping(ctx context.Context) (map[string]indexMetaResp, error)
 
 ```
 
 
 ### execute 
-```go
-	IndexName(name string) Client
-	Index() Index
+```html
+IndexName(name string) Client
+Index() Index
 
-	Not(filters ...Filter) Client
-	Where(filters ...Filter) Client
-	SQLWhere(query string, args ...interface{}) Client
-	Or(filters ...Filter) Client
-	OrderBy(field string, isDesc bool) Client
-	Size(uint64) Client
-	Agg(aggs ...Agg) Client
-	Start(uint64) Client
-	Limit(uint64, uint64) Client
-	Fields(...string) Client
-	Search(ctx context.Context, result interface{}) (uint64, error)
-	GetById(ctx context.Context, id string, result interface{}) error
-	RawSQL(ctx context.Context, closer io.ReadCloser, result interface{}) (uint64, error)
-	Count(ctx context.Context) (uint64, error)
-	Save(ctx context.Context, data ...interface{}) error
-	USave(ctx context.Context, docs ...Document) error
-	UpdateById(ctx context.Context, id string, data interface{}) error
-	// TODO map[string]interface{} to interface api
-	MUpdateById(ctx context.Context, docs ...Document) error
-	// TODO map[string]interface{} to interface api
-	MUpsertById(ctx context.Context, docs ...Document) error
-	UpsertById(ctx context.Context, id string, doc interface{}) error
-	// Delete delete_by_query
-	Delete(ctx context.Context) error
-	DeleteById(ctx context.Context, ids ...string) error
+Not(filters ...Filter) Client
+Where(filters ...Filter) Client
+SQLWhere(query string, args ...interface{}) Client
+Or(filters ...Filter) Client
+OrderBy(field string, isDesc bool) Client
+Size(uint64) Client
+Agg(aggs ...Agg) Client
+Start(uint64) Client
+Limit(uint64, uint64) Client
+Fields(...string) Client
+Search(ctx context.Context, result interface{}) (uint64, error)
+GetById(ctx context.Context, id string, result interface{}) error
+RawSQL(ctx context.Context, sql string, result interface{}) error
+TranslateSQL(ctx context.Context, sql string) ([]byte, error)
+Count(ctx context.Context) (uint64, error)
+Save(ctx context.Context, data ...interface{}) error
+USave(ctx context.Context, docs ...Document) error
+UpdateById(ctx context.Context, id string, data interface{}) error
+MUpdateById(ctx context.Context, docs ...Document) error
+MUpsertById(ctx context.Context, docs ...Document) error
+UpsertById(ctx context.Context, id string, doc interface{}) error
+// Delete delete_by_query
+Delete(ctx context.Context) error
+DeleteById(ctx context.Context, ids ...string) error
+Query(ctx context.Context, raw interface{}, result interface{}) error
 ```
