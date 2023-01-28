@@ -21,6 +21,9 @@ func parseSearchRespDefaultDecode(ctx context.Context, res *esapi.Response) (Sea
 	if res.IsError() {
 		return resp, fmt.Errorf("elasticsearch response error. status: %v, message: %s", res.Status(), res.String())
 	}
+	if res.StatusCode == 404 {
+		return resp, nil
+	}
 
 	respBody := res.Body
 

@@ -176,10 +176,10 @@ func (e es) Search(ctx context.Context, result interface{}) (uint64, error) {
 	res, err := rawESClient.Search(
 		searchOpts...,
 	)
-
 	if err != nil {
 		return 0, fmt.Errorf("unexpected error when get: %s", err)
 	}
+	defer res.Body.Close()
 
 	return e.parseSearchRespResult(ctx, res, result)
 }
@@ -215,6 +215,8 @@ func (e es) TranslateSQL(ctx context.Context, sql string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer res.Body.Close()
+
 	return body, nil
 }
 
@@ -225,6 +227,7 @@ func (e es) RawSQL(ctx context.Context, sql string, result interface{}) error {
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 	if res.IsError() {
 		return fmt.Errorf(res.String())
 	}
@@ -244,6 +247,8 @@ func (e es) GetById(ctx context.Context, id string, result interface{}) error {
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
+
 	return e.parseSourceRespResult(ctx, id, res, result)
 
 }
@@ -267,6 +272,7 @@ func (e es) UpdateById(ctx context.Context, id string, data interface{}) error {
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	_, err = parseBulkResp(ctx, res)
 	if err != nil {
@@ -302,6 +308,7 @@ func (e es) MUpdateById(ctx context.Context, docs ...Document) error {
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	_, err = parseBulkResp(ctx, res)
 	if err != nil {
@@ -346,6 +353,7 @@ func (e es) MUpsertById(ctx context.Context, docs ...Document) error {
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	_, err = parseBulkResp(ctx, res)
 	if err != nil {
@@ -396,6 +404,7 @@ func (e es) USave(ctx context.Context, docs ...Document) error {
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	_, err = parseBulkResp(ctx, res)
 	if err != nil {
@@ -427,6 +436,7 @@ func (e es) Delete(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("unexpected error when get: %s", err)
 	}
+	defer res.Body.Close()
 
 	result := make([]interface{}, 0, 1)
 	_, err = e.parseSearchRespResult(ctx, res, &result)
@@ -454,9 +464,11 @@ func (e es) Query(ctx context.Context, raw interface{}, result interface{}) erro
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 	if res.IsError() {
 		return fmt.Errorf(res.String())
 	}
+
 	return json.NewDecoder(res.Body).Decode(result)
 }
 
@@ -505,6 +517,7 @@ func (e es) Save(ctx context.Context, datas ...interface{}) error {
 		if err != nil {
 			return err
 		}
+		defer res.Body.Close()
 
 		_, err = parseBulkResp(ctx, res)
 		if err != nil {

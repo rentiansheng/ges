@@ -26,6 +26,8 @@ func (e esIndex) Exists(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	defer res.Body.Close()
+
 	if res.StatusCode == 404 {
 		return false, nil
 	}
@@ -49,6 +51,7 @@ func (e esIndex) Create(ctx context.Context, mapping IndexMeta) error {
 	if err != nil {
 		return fmt.Errorf("es client do error. %s", err.Error())
 	}
+	defer res.Body.Close()
 
 	if _, err := parseSearchRespDefaultDecode(ctx, res); err != nil {
 		return err
@@ -63,6 +66,8 @@ func (e esIndex) List(ctx context.Context) ([]error, error) {
 
 func (e esIndex) Mapping(ctx context.Context) (map[string]indexMetaResp, error) {
 	res, err := rawESClient.Indices.Get([]string{e.name})
+	defer res.Body.Close()
+
 	if err != nil {
 		return nil, err
 	}

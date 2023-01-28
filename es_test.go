@@ -271,6 +271,7 @@ func TestTranslateSQL(t *testing.T) {
 		sql    string
 		result string
 		prefix string
+		middle string
 		suffix string
 	}{
 		{
@@ -291,7 +292,8 @@ func TestTranslateSQL(t *testing.T) {
 		{
 			name:   "group by",
 			sql:    "select count(tid) from test_index group by tid",
-			prefix: `{"size":0,"_source":false,"stored_fields":"_none_","aggregations":{"groupby":{"composite":{"size":1000,"sources":[{"31de1189":{"terms":{"field":"tid","missing_bucket":true,"order":"asc"}}}]},"aggregations":`,
+			prefix: `{"size":0,"_source":false,"stored_fields":"_none_","aggregations":{"groupby":{"composite":{"size":1000,"sources":[{"`,
+			middle: `":{"terms":{"field":"tid","missing_bucket":true,"order":"asc"}}}]},"aggregations":{"`,
 			suffix: `{"filter":{"exists":{"field":"tid","boost":1.0}}}}}}}`,
 		},
 	}
@@ -304,6 +306,9 @@ func TestTranslateSQL(t *testing.T) {
 		}
 		if suit.prefix != "" {
 			require.Contains(t, string(res), suit.prefix, "es translate test suit %d name %s sql error", idx, suit.name)
+		}
+		if suit.middle != "" {
+			require.Contains(t, string(res), suit.middle, "es translate test suit %d name %s sql error", idx, suit.name)
 		}
 		if suit.suffix != "" {
 			require.Contains(t, string(res), suit.suffix, "es translate test suit %d name %s sql error", idx, suit.name)
