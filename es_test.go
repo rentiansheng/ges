@@ -183,6 +183,17 @@ func TestESUpsertAndMUpsertAndMUpdate(t *testing.T) {
 		require.Equal(t, docMap["label"], row.Label, "compare multi-upsert result label ")
 	}
 
+	rowsItemPtr := make([]*testIndexMappingRow, 0)
+	cnt, err = es.Search(ctx, &rowsItemPtr)
+	require.NoError(t, err, "es search docs error")
+	require.Equal(t, len(docs), int(cnt), "es search docs error")
+
+	for _, row := range rowsItemPtr {
+		docMap, _ := docs[row.EsId].(mapStrAny)
+		require.Equal(t, docMap["tid"], row.Id, "compare multi-upsert result id ")
+		require.Equal(t, docMap["label"], row.Label, "compare multi-upsert result label ")
+	}
+
 }
 
 func TestESUpsertNoID(t *testing.T) {

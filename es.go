@@ -604,19 +604,23 @@ func (e es) parseSearchResultIndexHit(ctx context.Context, esID string, dataRaw 
 	if err := d.Decode(elemp.Interface()); nil != err {
 		return err
 	}
-	elemt := elemp.Elem().Type()
+	elemt := elemp.Type().Elem()
+	for elemt.Kind() == reflect.Ptr || elemt.Kind() == reflect.Interface {
+		elemp = elemp.Elem()
+		elemt = elemp.Type().Elem()
+	}
 	// add _id
 	//if searchOpt.id != nil {
 	if elemt.Kind() == reflect.Map {
 		elemp.Elem().SetMapIndex(reflect.ValueOf("_id"), reflect.ValueOf(esID))
 	} else if elemt.Kind() == reflect.Struct {
+		if !elemp.IsValid() {
+			return fmt.Errorf("struct IsValid false")
+		}
+		if !elemp.Elem().CanSet() {
+			return fmt.Errorf("struct not allow change")
+		}
 		for i := 0; i < elemt.NumField(); i++ {
-			if !elemp.IsValid() {
-				return fmt.Errorf("struct IsValid false")
-			}
-			if !elemp.Elem().CanSet() {
-				return fmt.Errorf("struct not allow change")
-			}
 			field := elemt.Field(i)
 			tags := strings.Split(field.Tag.Get("json"), ",")
 			for _, tag := range tags {
