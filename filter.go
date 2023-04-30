@@ -24,11 +24,11 @@ func (t term) MarshalJSON() ([]byte, error) {
 
 type terms struct {
 	name   string
-	values []interface{}
+	values interface{}
 }
 
 func (t terms) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]map[string][]interface{}{
+	return json.Marshal(map[string]map[string]interface{}{
 		"terms": {
 			t.name: t.values,
 		},
@@ -117,8 +117,11 @@ func NewFilter() Filter {
 }
 
 func Term(field string, value interface{}) Filter { return filter{}.Term(field, value) }
-func Terms(field string, values ...interface{}) Filter {
-	return filter{}.Terms(field, values...)
+func Terms(field string, values interface{}) Filter {
+	return filter{}.Terms(field, values)
+}
+func TermsSingeItem(field string, value interface{}) Filter {
+	return filter{}.TermsSingeItem(field, value)
 }
 
 func Between(field string, start, end int64) Filter {
@@ -136,7 +139,12 @@ func (f filter) Term(field string, value interface{}) Filter {
 	return f
 }
 
-func (f filter) Terms(field string, values ...interface{}) Filter {
+func (f filter) TermsSingeItem(field string, value interface{}) Filter {
+	f.condition = append(f.condition, terms{field, []interface{}{value}})
+	return f
+}
+
+func (f filter) Terms(field string, values interface{}) Filter {
 	f.condition = append(f.condition, terms{field, values})
 	return f
 }

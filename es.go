@@ -14,7 +14,6 @@ import (
 	"github.com/elastic/go-elasticsearch/v7/esapi"
 
 	"github.com/rentiansheng/mapper"
-	"github.com/rentiansheng/passion/lib/array"
 )
 
 /***************************
@@ -34,11 +33,6 @@ type es struct {
 	size      uint64
 	cond      cond
 	agg       map[string]interface{}
-
-	// field used by sql query
-	isSqlQuery bool
-	queries    []string
-	args       []interface{}
 }
 
 type cond struct {
@@ -70,33 +64,55 @@ func (e es) IndexName(name string) Client {
 	return e
 }
 
+func (e es) Clone() es {
+	newE := es{}
+	if err := mapper.AllMapper(context.TODO(), e, &newE); err != nil {
+		panic("clone es error" + fmt.Sprintf("%#v", err))
+	}
+	return newE
+}
+
 func (e es) Index() Index {
 	index := esIndex{name: e.indexName}
 	return index
 }
 
 func (e es) Not(filters ...Filter) Client {
+	e = e.Clone()
 	for _, filter := range filters {
+		if filter == nil {
+			continue
+		}
 		e.cond.not = append(e.cond.not, filter.Result()...)
 	}
 	return e
 }
 
 func (e es) Where(filters ...Filter) Client {
+	e = e.Clone()
 	for _, filter := range filters {
+		if filter == nil {
+			continue
+		}
 		e.cond.must = append(e.cond.must, filter.Result()...)
+
 	}
 	return e
 }
 
 func (e es) Or(filters ...Filter) Client {
+	e = e.Clone()
 	for _, filter := range filters {
+		if filter == nil {
+			continue
+		}
 		e.cond.should = append(e.cond.should, filter.Result()...)
 	}
 	return e
 }
 
 func (e es) OrderBy(field string, isDesc bool) Client {
+	e = e.Clone()
 	if isDesc {
 		e.sorts = append(e.sorts, field+":desc")
 	} else {
@@ -106,6 +122,7 @@ func (e es) OrderBy(field string, isDesc bool) Client {
 }
 
 func (e es) Agg(aggs ...Agg) Client {
+	e = e.Clone()
 	e.isAgg = true
 	for _, agg := range aggs {
 		name, value := agg.Result()
@@ -115,27 +132,26 @@ func (e es) Agg(aggs ...Agg) Client {
 }
 
 func (e es) Size(u uint64) Client {
+	e = e.Clone()
 	e.size = u
 	return e
 }
 
 func (e es) Start(u uint64) Client {
+	e = e.Clone()
 	e.from = u
 	return e
 }
 
 func (e es) Limit(from uint64, size uint64) Client {
+	e = e.Clone()
 	e.from, e.size = from, size
 	return e
 }
 
-func (e es) SQLWhere(query string, args ...interface{}) Client {
-	e.isSqlQuery = true
-	queries := append(e.queries, query)
-	e.queries = queries
-
-	newArgs := append(e.args, args...)
-	e.args = newArgs
+func (e es) Limit64(from int64, size int64) Client {
+	e = e.Clone()
+	e.from, e.size = uint64(from), uint64(size)
 	return e
 }
 
@@ -227,10 +243,11 @@ func (e es) RawSQL(ctx context.Context, sql string, result interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+
 	if res.IsError() {
 		return fmt.Errorf(res.String())
 	}
+	defer res.Body.Close()
 
 	return json.NewDecoder(res.Body).Decode(result)
 }
@@ -243,6 +260,7 @@ func (e es) GetById(ctx context.Context, id string, result interface{}) error {
 		id,
 		rawESClient.GetSource.WithContext(ctx),
 		rawESClient.GetSource.WithPretty(),
+		rawESClient.GetSource.WithSourceIncludes(e.fields...),
 	)
 	if err != nil {
 		return err
@@ -415,7 +433,7 @@ func (e es) USave(ctx context.Context, docs ...Document) error {
 }
 
 func (e es) DeleteById(ctx context.Context, ids ...string) error {
-	return e.Where(Terms("_id", array.Strings.ToInterface(ids)...)).
+	return e.Where(Terms("_id", ids)).
 		Delete(ctx)
 }
 
@@ -446,6 +464,7 @@ func (e es) Delete(ctx context.Context) error {
 func (e es) Count(ctx context.Context) (uint64, error) {
 	result := make([]map[string]interface{}, 0)
 	e.size = 0
+	// TODO: use count api instead of search
 	return e.Search(ctx, &result)
 }
 
@@ -560,24 +579,59 @@ func (e es) parseSearchRespResult(ctx context.Context, res *esapi.Response, resu
 		}
 
 	} else {
-		if resultV.Elem().Kind() != reflect.Slice {
-			return 0, fmt.Errorf("results argument must be a slice address")
-		}
 		total = resp.Hits.Total.Value
-
-		elemt := resultV.Elem().Type().Elem()
-		slice := reflect.MakeSlice(resultV.Elem().Type(), 0, 10)
-		for _, indexHit := range resp.Hits.IndexHits {
-			elem := reflect.New(elemt)
-			err := e.parseSearchResultIndexHit(ctx, indexHit.Id, indexHit.Source, elem)
-			if err != nil {
-				return total, err
+		switch resultV.Elem().Kind() {
+		case reflect.Slice:
+			if err := e.parseSearchRespResultArray(ctx, resp, resultV); err != nil {
+				return 0, err
 			}
-			slice = reflect.Append(slice, elem.Elem())
+		case reflect.Map:
+			if len(resp.Hits.IndexHits) == 0 {
+				return 0, NotFoundError
+			}
+			if resultV.Elem().IsNil() {
+				return 0, fmt.Errorf("results argument must be initialized")
+			}
+			indexHit := resp.Hits.IndexHits[0]
+			if err := e.parseSearchResultIndexHit(ctx, indexHit.Id, indexHit.Source, resultV.Elem()); err != nil {
+				return 0, err
+			}
+		case reflect.Struct:
+			if len(resp.Hits.IndexHits) == 0 {
+				return 0, NotFoundError
+			}
+			if resultV.IsNil() {
+				return 0, fmt.Errorf("results argument must be initialized")
+			}
+			indexHit := resp.Hits.IndexHits[0]
+			if err := e.parseSearchResultIndexHit(ctx, indexHit.Id, indexHit.Source, resultV); err != nil {
+				return 0, err
+			}
+		default:
+			return 0, fmt.Errorf("results argument must be a slice or map/struct address")
 		}
-		resultV.Elem().Set(slice)
+
 	}
 	return total, nil
+}
+
+func (e es) parseSearchRespResultArray(ctx context.Context, resp SearchResult, resultV reflect.Value) error {
+	if resultV.Elem().Kind() != reflect.Slice {
+		return fmt.Errorf("results argument must be a slice address")
+	}
+
+	elemt := resultV.Elem().Type().Elem()
+	slice := reflect.MakeSlice(resultV.Elem().Type(), 0, 10)
+	for _, indexHit := range resp.Hits.IndexHits {
+		elem := reflect.New(elemt)
+		err := e.parseSearchResultIndexHit(ctx, indexHit.Id, indexHit.Source, elem)
+		if err != nil {
+			return err
+		}
+		slice = reflect.Append(slice, elem.Elem())
+	}
+	resultV.Elem().Set(slice)
+	return nil
 }
 
 func (e es) parseSourceRespResult(ctx context.Context, id string, res *esapi.Response, result interface{}) error {
@@ -599,27 +653,31 @@ func (e es) parseSourceRespResult(ctx context.Context, id string, res *esapi.Res
 }
 
 func (e es) parseSearchResultIndexHit(ctx context.Context, esID string, dataRaw json.RawMessage, elemp reflect.Value) error {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("recover", r)
+		}
+	}()
 	d := json.NewDecoder(bytes.NewReader(dataRaw))
 	d.UseNumber()
 	if err := d.Decode(elemp.Interface()); nil != err {
 		return err
 	}
-	elemt := elemp.Type().Elem()
-	for elemt.Kind() == reflect.Ptr || elemt.Kind() == reflect.Interface {
+	for elemp.Kind() == reflect.Ptr && elemp.Elem().Kind() != reflect.Struct && elemp.Elem().Kind() != reflect.Map {
 		elemp = elemp.Elem()
-		elemt = elemp.Type().Elem()
 	}
 	// add _id
-	//if searchOpt.id != nil {
-	if elemt.Kind() == reflect.Map {
+	if elemp.Elem().Kind() == reflect.Map {
 		elemp.Elem().SetMapIndex(reflect.ValueOf("_id"), reflect.ValueOf(esID))
-	} else if elemt.Kind() == reflect.Struct {
+	} else if elemp.Elem().Kind() == reflect.Struct {
 		if !elemp.IsValid() {
 			return fmt.Errorf("struct IsValid false")
 		}
 		if !elemp.Elem().CanSet() {
 			return fmt.Errorf("struct not allow change")
 		}
+		elemt := elemp.Elem().Type()
+
 		for i := 0; i < elemt.NumField(); i++ {
 			field := elemt.Field(i)
 			tags := strings.Split(field.Tag.Get("json"), ",")

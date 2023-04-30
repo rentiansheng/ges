@@ -98,7 +98,7 @@ func TestESIndexCreateAndCountAndUpdate(t *testing.T) {
 	require.Equal(t, len(docs), int(cnt), "es count docs error")
 
 	rows := make([]testIndexMappingRow, 0, 3)
-	cnt, err = es.Where(Terms("tid", 1)).Search(ctx, &rows)
+	cnt, err = es.Where(TermsSingeItem("tid", 1)).Search(ctx, &rows)
 	require.NoError(t, err, "es search docs error")
 	require.Equal(t, 1, len(rows), "es search docs error")
 	if cnt == 0 {

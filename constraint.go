@@ -24,34 +24,37 @@ type Client interface {
 
 	Not(filters ...Filter) Client
 	Where(filters ...Filter) Client
-	SQLWhere(query string, args ...interface{}) Client
 	Or(filters ...Filter) Client
 	OrderBy(field string, isDesc bool) Client
 	Size(uint64) Client
 	Agg(aggs ...Agg) Client
 	Start(uint64) Client
 	Limit(uint64, uint64) Client
+	Limit64(int64, int64) Client
 	Fields(...string) Client
 	Search(ctx context.Context, result interface{}) (uint64, error)
 	GetById(ctx context.Context, id string, result interface{}) error
 	RawSQL(ctx context.Context, sql string, result interface{}) error
-	TranslateSQL(ctx context.Context, sql string) ([]byte, error)
 	Count(ctx context.Context) (uint64, error)
 	Save(ctx context.Context, data ...interface{}) error
 	USave(ctx context.Context, docs ...Document) error
 	UpdateById(ctx context.Context, id string, data interface{}) error
+	// TODO map[string]interface{} to interface api
 	MUpdateById(ctx context.Context, docs ...Document) error
+	// TODO map[string]interface{} to interface api
 	MUpsertById(ctx context.Context, docs ...Document) error
 	UpsertById(ctx context.Context, id string, doc interface{}) error
 	// Delete delete_by_query
 	Delete(ctx context.Context) error
 	DeleteById(ctx context.Context, ids ...string) error
+	TranslateSQL(ctx context.Context, sql string) ([]byte, error)
 	Query(ctx context.Context, raw interface{}, result interface{}) error
 }
 
 type Filter interface {
 	Term(field string, value interface{}) Filter
-	Terms(field string, values ...interface{}) Filter
+	Terms(field string, values interface{}) Filter
+	TermsSingeItem(field string, value interface{}) Filter
 	Between(field string, start, end int64) Filter
 	Gt(field string, value int64) Filter
 	Gte(field string, value int64) Filter
@@ -72,9 +75,13 @@ type Index interface {
 type Agg interface {
 	Name(string) Agg
 	DateHistogram(field, interval, format, offset, timeZone string) Agg
+	DateHistogramAgg(field, interval, format, offset, timeZone string, sub ...Agg) Agg
 	Distinct(field string, number int64) Agg
 	Filter(agg Agg, filter ...AggFilter) Agg
-	Raw(interface{}) Agg
+	Sum(field string) Agg
+	Nested(path string) Agg
+	Avg(field string) Agg
+	//Metric(...AggDateHistogramMetric) Agg
 	Result() (string, interface{})
 }
 
@@ -136,9 +143,28 @@ type SQLResult struct {
 	Rows    [][]interface{} `json:"rows"`
 }
 
+type SQLCountResult struct {
+	Error   interface{} `json:"error"`
+	Columns []SQLColumn `json:"columns"`
+	Rows    [][]uint64  `json:"rows"`
+}
+
+func (s SQLCountResult) Count() uint64 {
+	if len(s.Rows) > 0 && len(s.Rows[0]) > 0 {
+		return s.Rows[0][0]
+	}
+	return 0
+}
+
 type SQLColumn struct {
 	Name string `json:"name"`
 	Type string `json:"type"`
+}
+
+type MultiUpdate interface {
+	Filter(filter map[string]interface{}) MultiUpdate
+	Doc(doc map[string]interface{}) MultiUpdate
+	Get() (filter map[string]interface{}, doc map[string]interface{})
 }
 
 type IndexMeta struct {
@@ -196,11 +222,11 @@ type IndexMappingSettings struct {
 
 type IndexSettings struct {
 	CreationDate     string `json:"creation_date,omitempty"`
-	NumberOfShards   string `json:"number_of_shards,omitempty"`
-	NumberOfReplicas string `json:"number_of_replicas,omitempty"`
+	NumberOfShards   int    `json:"number_of_shards,omitempty"`
+	NumberOfReplicas int    `json:"number_of_replicas,omitempty"`
 	Uuid             string `json:"uuid,omitempty"`
-	Version          struct {
-		Created string `json:"created"`
+	Version          *struct {
+		Created string `json:"created,omitempty"`
 	} `json:"version,omitempty"`
 	ProvidedName string `json:"provided_name,omitempty"`
 }
