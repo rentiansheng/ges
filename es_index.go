@@ -66,8 +66,6 @@ func (e esIndex) List(ctx context.Context) ([]error, error) {
 
 func (e esIndex) Mapping(ctx context.Context) (map[string]indexMetaResp, error) {
 	res, err := rawESClient.Indices.Get([]string{e.name})
-	defer res.Body.Close()
-
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +73,7 @@ func (e esIndex) Mapping(ctx context.Context) (map[string]indexMetaResp, error) 
 	if err != nil {
 		return nil, err
 	}
+	defer res.Body.Close()
 
 	return indexRes, nil
 }

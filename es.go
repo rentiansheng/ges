@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/elastic/go-elasticsearch/v7/esapi"
-
 	"github.com/rentiansheng/mapper"
 )
 
@@ -26,13 +25,14 @@ import (
 type es struct {
 	isAgg bool
 	// 	  field:desc
-	sorts     []string
-	fields    []string
-	indexName string
-	from      uint64
-	size      uint64
-	cond      cond
-	agg       map[string]interface{}
+	sorts              []string
+	fields             []string
+	indexName          string
+	from               uint64
+	size               uint64
+	cond               cond
+	agg                map[string]interface{}
+	adjustPureNegative bool
 }
 
 type cond struct {
@@ -46,9 +46,10 @@ type cond struct {
 func (e es) MarshalJSON() ([]byte, error) {
 	cond := esCondition{
 		Query: esConditionQuery{Bool: esQueryBool{
-			Must:   e.cond.must,
-			Not:    e.cond.not,
-			Should: e.cond.should,
+			Must:               e.cond.must,
+			Not:                e.cond.not,
+			Should:             e.cond.should,
+			AdjustPureNegative: e.adjustPureNegative,
 		}},
 		Agg: e.agg,
 	}
@@ -75,6 +76,12 @@ func (e es) Clone() es {
 func (e es) Index() Index {
 	index := esIndex{name: e.indexName}
 	return index
+}
+
+func (e es) AdjustPurePegative(v bool) Client {
+	e = e.Clone()
+	e.adjustPureNegative = v
+	return e
 }
 
 func (e es) Not(filters ...Filter) Client {
@@ -161,10 +168,35 @@ func (e es) Find(ctx context.Context, result interface{}) error {
 }
 
 func (e es) Search(ctx context.Context, result interface{}) (uint64, error) {
+	res, err := e.searchHelper(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("unexpected error when get: %s", err)
+	}
+	defer res.Body.Close()
+
+	return e.parseSearchRespResult(ctx, res, result)
+}
+
+func (e es) SearchResultHits(ctx context.Context) ([]SearchResultHitResult, uint64, error) {
+	res, err := e.searchHelper(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("unexpected error when get: %s", err)
+	}
+	defer res.Body.Close()
+
+	resp, err := parseSearchRespDefaultDecode(ctx, res)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return resp.Hits.IndexHits, resp.Hits.Total.Value, nil
+}
+
+func (e es) searchHelper(ctx context.Context) (*esapi.Response, error) {
 
 	queryBody, err := e.buildQuery(ctx)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	searchOpts := []func(*esapi.SearchRequest){
@@ -189,23 +221,18 @@ func (e es) Search(ctx context.Context, result interface{}) (uint64, error) {
 		}
 	}
 
-	res, err := rawESClient.Search(
+	return rawESClient.Search(
 		searchOpts...,
 	)
-	if err != nil {
-		return 0, fmt.Errorf("unexpected error when get: %s", err)
-	}
-	defer res.Body.Close()
-
-	return e.parseSearchRespResult(ctx, res, result)
 }
 
 func (e es) buildQuery(ctx context.Context) (*bytes.Buffer, error) {
 	cond := esCondition{
 		Query: esConditionQuery{Bool: esQueryBool{
-			Must:   e.cond.must,
-			Not:    e.cond.not,
-			Should: e.cond.should,
+			Must:               e.cond.must,
+			Not:                e.cond.not,
+			Should:             e.cond.should,
+			AdjustPureNegative: e.adjustPureNegative,
 		}},
 		Agg: e.agg,
 	}
@@ -236,7 +263,6 @@ func (e es) TranslateSQL(ctx context.Context, sql string) ([]byte, error) {
 	return body, nil
 }
 
-// RawSQL
 func (e es) RawSQL(ctx context.Context, sql string, result interface{}) error {
 	//https://www.elastic.co/guide/en/elasticsearch/reference/current/sql-search-api.html
 	res, err := rawESClient.SQL.Query(strings.NewReader(fmt.Sprintf(`{"query":"%s"}`, sql)), rawESClient.SQL.Query.WithContext(ctx))
@@ -252,7 +278,6 @@ func (e es) RawSQL(ctx context.Context, sql string, result interface{}) error {
 	return json.NewDecoder(res.Body).Decode(result)
 }
 
-// GetById get document by id
 func (e es) GetById(ctx context.Context, id string, result interface{}) error {
 
 	res, err := rawESClient.GetSource(
@@ -271,7 +296,7 @@ func (e es) GetById(ctx context.Context, id string, result interface{}) error {
 
 }
 
-// UpdateById update document by id
+// UpdateById
 func (e es) UpdateById(ctx context.Context, id string, data interface{}) error {
 	bufferBody := bytes.NewBufferString(fmt.Sprintf(`{"update": {"_id": "%s"}}`, id))
 	bufferBody.WriteString("\n")
@@ -300,7 +325,7 @@ func (e es) UpdateById(ctx context.Context, id string, data interface{}) error {
 	return nil
 }
 
-// MUpdateById  multiple update document by id
+// MUpdateById
 func (e es) MUpdateById(ctx context.Context, docs ...Document) error {
 	bufferBody := &bytes.Buffer{}
 
@@ -526,7 +551,7 @@ func (e es) Save(ctx context.Context, datas ...interface{}) error {
 			byteBody.WriteString(bulkInsertAction)
 			// json encode 会自动加\n
 			if err := jd.Encode(item); err != nil {
-				return fmt.Errorf("esorm save encode data error. %s", err.Error())
+				return fmt.Errorf("ges save encode data error. %s", err.Error())
 			}
 		}
 		if byteBody.Len() == 0 {

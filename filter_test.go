@@ -2,9 +2,8 @@ package ges
 
 import (
 	"encoding/json"
-	"testing"
-
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 /***************************
@@ -57,5 +56,18 @@ func TestAggFilters(t *testing.T) {
 	require.NoError(t, err, "TestAggFilters json.Marshal")
 	expected := `{"aggs":{"name":{"date_histogram":{"field":"field","calendar_interval":"week","format":"yyyy-MM-dd","offset":"+3d","time_zone":"+08:00"}}},"filters":{"filters":{"filter1":{"terms":{"key":["value1","value2"]}},"filter2":{"terms":{"key":["value"]}}}}}`
 	require.Equal(t, expected, string(actual), "TestAggFilters ")
+
+}
+
+func TestAggDistinctAgg(t *testing.T) {
+	agg := AggDistinct("field", 10)
+	subAgg := AggDataHistogram("field", "week", "yyyy-MM-dd", "+3d", "+08:00")
+	agg = agg.Aggs(subAgg)
+	name, resultAgg := agg.Result()
+	require.Equal(t, "field", name, "TestAggDistinctAgg ")
+	actual, err := json.Marshal(resultAgg)
+	require.NoError(t, err, "TestAggDistinctAgg json.Marshal")
+	expected := `{"aggs":{"field":{"date_histogram":{"field":"field","calendar_interval":"week","format":"yyyy-MM-dd","offset":"+3d","time_zone":"+08:00"}}},"terms":{"field":"field","size":10}}`
+	require.Equal(t, expected, string(actual), "TestAggDistinctAgg ")
 
 }

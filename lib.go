@@ -36,3 +36,4 @@ func DocsFromMap(docs map[string]interface{}) []Document {
 }
 
 type mapStrAny map[string]interface{}
+

@@ -9,4 +9,4 @@ import "errors"
 
 ***************************/
 
-var NotFoundError = errors.New("not found document")
+var NotFoundError = errors.New("record not found")
