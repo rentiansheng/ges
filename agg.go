@@ -26,12 +26,20 @@ func AggDistinct(field string, number int64) Agg {
 	return agg{}.Name(field).Distinct(field, number)
 }
 
+func AggDistinctName(name, field string, number int64) Agg {
+	return agg{}.Name(name).Distinct(field, number)
+}
+
 func AggSum(name, field string) Agg {
 	return agg{}.Name(name).Sum(field)
 }
 
 func AggAvg(name, field string) Agg {
 	return agg{}.Name(name).Avg(field)
+}
+
+func AggNested(name, field string) Agg {
+	return agg{}.Name(name).Nested(field)
 }
 
 func AggDataHistogramSub(name, field, interval, format, offset, timeZone string, subs ...Agg) Agg {
@@ -49,6 +57,7 @@ type agg struct {
 	sum           *aggSum           `json:"sum"`
 	avg           *aggAvg           `json:"avg"`
 	nested        string            `json:"nested"`
+	aggs          []Agg             `json:"aggs"`
 }
 
 func (a agg) MarshalJSON() ([]byte, error) {
@@ -59,20 +68,20 @@ func (a agg) MarshalJSON() ([]byte, error) {
 	if a.filters == nil {
 		if a.dataHistogram != nil {
 			result["date_histogram"] = a.dataHistogram
-			if len(a.dataHistogram.aggs) != 0 {
-				subAggs := make(map[string]interface{}, len(a.dataHistogram.aggs))
-				for _, item := range a.dataHistogram.aggs {
-					name, info := item.Result()
-					subAggs[name] = info
-				}
-				result["aggs"] = subAggs
-			}
 		} else if a.distinct != nil {
 			result["terms"] = a.distinct
 		} else if a.sum != nil {
 			result["sum"] = a.sum
 		} else if a.avg != nil {
 			result["avg"] = a.avg
+		}
+		if len(a.aggs) != 0 {
+			subAggs := make(map[string]interface{}, len(a.aggs))
+			for _, item := range a.aggs {
+				name, info := item.Result()
+				subAggs[name] = info
+			}
+			result["aggs"] = subAggs
 		}
 		return json.Marshal(result)
 	}
@@ -83,9 +92,14 @@ func (a agg) MarshalJSON() ([]byte, error) {
 		filters[name] = cond
 	}
 	result["filters"] = map[string]interface{}{"filters": filters}
-	subAggName, subAgg := a.filters.agg.Result()
-	result["aggs"] = map[string]interface{}{subAggName: subAgg}
-
+	if len(a.aggs) != 0 {
+		subAggs := make(map[string]interface{}, len(a.aggs))
+		for _, item := range a.aggs {
+			name, info := item.Result()
+			subAggs[name] = info
+		}
+		result["aggs"] = subAggs
+	}
 	return json.Marshal(result)
 }
 
@@ -95,7 +109,10 @@ func (a agg) Name(name string) Agg {
 }
 
 func (a agg) Filter(agg Agg, filter ...AggFilter) Agg {
-	a.filters = &aggFilters{buckets: filter, agg: agg}
+	a.filters = &aggFilters{buckets: filter}
+	if agg != nil {
+		a.aggs = append(a.aggs, agg)
+	}
 	return a
 }
 
@@ -127,8 +144,8 @@ func (a agg) DateHistogramAgg(field, interval, format, offset, timeZone string, 
 		Format:           format,
 		Offset:           offset,
 		TimeZone:         timeZone,
-		aggs:             sub,
 	}
+	a.aggs = sub
 	return a
 }
 
@@ -146,6 +163,23 @@ func (a agg) Nested(path string) Agg {
 	return a
 }
 
+func (a agg) Aggs(sub ...Agg) Agg {
+	a.aggs = make([]Agg, 0, len(sub))
+	for _, i := range sub {
+		if i == nil {
+			continue
+		}
+		a.aggs = append(a.aggs, i)
+	}
+
+	return a
+}
+
+func (a agg) AggFilter(filter ...AggFilter) Agg {
+	a.filters.buckets = append(a.filters.buckets, filter...)
+	return a
+}
+
 func (a agg) Result() (string, interface{}) {
 	return a.name, a
 }
@@ -157,7 +191,6 @@ type aggDateHistogram struct {
 	Format           string `json:"format,omitempty"`
 	Offset           string `json:"offset,omitempty"`
 	TimeZone         string `json:"time_zone,omitempty"`
-	aggs             []Agg  `json:"-"`
 }
 
 type aggDistinct struct {
@@ -169,19 +202,20 @@ type aggDistinct struct {
 // @Description:
 type aggFilters struct {
 	buckets []AggFilter
-	agg     Agg
 }
 
 func AggFilterName(name string) AggFilter {
 	return &aggFilter{
-		name:  name,
-		terms: nil,
+		name:   name,
+		terms:  nil,
+		ranges: nil,
 	}
 }
 
 type aggFilter struct {
-	name  string
-	terms map[string]interface{}
+	name   string
+	terms  map[string]interface{}
+	ranges map[string]interface{}
 }
 
 func (a aggFilter) Name(name string) AggFilter {
@@ -206,10 +240,20 @@ func (a aggFilter) TermsArray(field string, arr interface{}) AggFilter {
 	return a
 }
 
+func (a aggFilter) Range(field string, r RangeFilter) AggFilter {
+	if a.ranges == nil {
+		a.ranges = make(map[string]interface{}, 0)
+	}
+	a.ranges[field] = r
+	return a
+}
+
 func (a aggFilter) Result() (string, map[string]interface{}) {
 	result := make(map[string]interface{}, 0)
 	if a.terms != nil {
 		result["terms"] = a.terms
+	} else if a.ranges != nil {
+		result["range"] = a.ranges
 	}
 	return a.name, result
 }

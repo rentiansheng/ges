@@ -6,7 +6,6 @@ require (
 	github.com/elastic/go-elasticsearch/v7 v7.17.7
 	github.com/orlangure/gnomock v0.24.0
 	github.com/rentiansheng/mapper v0.0.0-20221215062323-537efc614764
-	github.com/rentiansheng/passion v0.0.0-20221109074316-762cdd22611b
 	github.com/stretchr/testify v1.8.1
 )
 

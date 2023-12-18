@@ -38,6 +38,7 @@ type bulkResp struct {
 func parseBulkResp(ctx context.Context, res *esapi.Response) (resp *bulkResp, err error) {
 
 	respBody := res.Body
+
 	// http status_code not 2xx
 	if res.IsError() {
 		return nil, fmt.Errorf("bulk fail, status_code: %d, body: %s", res.StatusCode, res.String())

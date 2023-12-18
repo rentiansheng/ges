@@ -18,22 +18,42 @@ type DateHistogramBucket struct {
 }
 
 type DistinctBuckets struct {
-	Buckets []DistinctBucket `json:"buckets"`
+	DocCountErrorUpperBound int              `json:"doc_count_error_upper_bound"`
+	SumOtherDocCount        int              `json:"sum_other_doc_count"`
+	Buckets                 []DistinctBucket `json:"buckets"`
 }
 
 type DistinctBucket struct {
-	Key      string `json:"key"`
-	DocCount int    `json:"doc_count"`
+	Key      interface{} `json:"key"`
+	DocCount int         `json:"doc_count"`
 }
 
-const (
-	/** date histogram interval type  https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-bucket-datehistogram-aggregation.html **/
+type DocCountBuckets struct {
+	Buckets map[string]DocCountBucket `json:"buckets"`
+}
 
-	DateHistogramIntervalMinute  = "minute"
-	DateHistogramIntervalHour    = "hour"
-	DateHistogramIntervalDay     = "day"
-	DateHistogramIntervalWeek    = "week"
-	DateHistogramIntervalMonth   = "month"
-	DateHistogramIntervalQuarter = "quarter"
-	DateHistogramIntervalYear    = "year"
-)
+type DocCountBucket struct {
+	DocCount int `json:"doc_count"`
+}
+
+type DistinctBucketsI64 struct {
+	DocCountErrorUpperBound int                    `json:"doc_count_error_upper_bound"`
+	SumOtherDocCount        int                    `json:"sum_other_doc_count"`
+	Buckets                 []DistinctBucketKeyI64 `json:"buckets"`
+}
+
+type DistinctBucketKeyI64 struct {
+	Key      int64 `json:"key"`
+	DocCount int   `json:"doc_count"`
+}
+
+type DistinctBucketsU64 struct {
+	DocCountErrorUpperBound int                    `json:"doc_count_error_upper_bound"`
+	SumOtherDocCount        int                    `json:"sum_other_doc_count"`
+	Buckets                 []DistinctBucketKeyU64 `json:"buckets"`
+}
+
+type DistinctBucketKeyU64 struct {
+	Key      uint64 `json:"key"`
+	DocCount int    `json:"doc_count"`
+}

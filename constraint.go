@@ -15,13 +15,14 @@ import (
 const (
 	MaxBulkItemsLimit       = 1000
 	BulkItemsLimit          = 100
-	MaxBulkUpdateItemsLimit = 10
+	MaxBulkUpdateItemsLimit = 50
 )
 
 type Client interface {
 	IndexName(name string) Client
 	Index() Index
 
+	AdjustPurePegative(v bool) Client
 	Not(filters ...Filter) Client
 	Where(filters ...Filter) Client
 	Or(filters ...Filter) Client
@@ -33,6 +34,7 @@ type Client interface {
 	Limit64(int64, int64) Client
 	Fields(...string) Client
 	Search(ctx context.Context, result interface{}) (uint64, error)
+	SearchResultHits(ctx context.Context) ([]SearchResultHitResult, uint64, error)
 	GetById(ctx context.Context, id string, result interface{}) error
 	RawSQL(ctx context.Context, sql string, result interface{}) error
 	Count(ctx context.Context) (uint64, error)
@@ -47,8 +49,6 @@ type Client interface {
 	// Delete delete_by_query
 	Delete(ctx context.Context) error
 	DeleteById(ctx context.Context, ids ...string) error
-	TranslateSQL(ctx context.Context, sql string) ([]byte, error)
-	Query(ctx context.Context, raw interface{}, result interface{}) error
 }
 
 type Filter interface {
@@ -56,13 +56,35 @@ type Filter interface {
 	Terms(field string, values interface{}) Filter
 	TermsSingeItem(field string, value interface{}) Filter
 	Between(field string, start, end int64) Filter
+	FromTo(field string, from, to interface{}) Filter
+	Range(field string, from, to interface{}) Filter
 	Gt(field string, value int64) Filter
 	Gte(field string, value int64) Filter
 	Lt(field string, value int64) Filter
 	Lte(field string, value int64) Filter
 	Wildcard(field string, value string) Filter
 	WildcardSuffix(field string, value string) Filter
+	BoolItem(must, not, should, match Filter, adjustPureNegative bool) Filter
+	Nested(nestedFilter NestedFilter) Filter
 	Result() []interface{}
+}
+
+type RangeFilter interface {
+	FromTo(from, to interface{}) RangeFilter
+	Range(start, end interface{}) RangeFilter
+	Gt(value interface{}) RangeFilter
+	Gte(value interface{}) RangeFilter
+	Lt(value interface{}) RangeFilter
+	Lte(value interface{}) RangeFilter
+}
+
+type NestedFilter interface {
+	Must(filters ...Filter) NestedFilter
+	Should(filters ...Filter) NestedFilter
+	Not(filters ...Filter) NestedFilter
+	Path(path string) NestedFilter
+	Match(filters ...Filter) NestedFilter
+	Result() interface{}
 }
 
 type Index interface {
@@ -81,6 +103,8 @@ type Agg interface {
 	Sum(field string) Agg
 	Nested(path string) Agg
 	Avg(field string) Agg
+	Aggs(sub ...Agg) Agg
+	AggFilter(filter ...AggFilter) Agg
 	//Metric(...AggDateHistogramMetric) Agg
 	Result() (string, interface{})
 }
@@ -89,7 +113,7 @@ type AggFilter interface {
 	Name(string) AggFilter
 	Terms(field string, val ...interface{}) AggFilter
 	TermsArray(field string, val interface{}) AggFilter
-
+	Range(field string, f RangeFilter) AggFilter
 	Result() (string, map[string]interface{})
 }
 
