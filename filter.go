@@ -37,65 +37,6 @@ func (t terms) MarshalJSON() ([]byte, error) {
 	})
 }
 
-type between struct {
-	name string `json:"-"`
-	betweenValue
-}
-
-type betweenValue struct {
-	LtePtr interface{} `json:"lte,omitempty"`
-	LtPtr  interface{} `json:"lt,omitempty"`
-	GtePtr interface{} `json:"gte,omitempty"`
-	GtPtr  interface{} `json:"gt,omitempty"`
-}
-
-// FromTo  range query. [from, to), from <= field < to
-func (f betweenValue) FromTo(from, to interface{}) RangeFilter {
-	f.GtePtr, f.LtPtr = from, to
-	return f
-}
-
-func (f betweenValue) Range(start, end interface{}) RangeFilter {
-	f.GtePtr, f.LtePtr = start, end
-	return f
-}
-
-func (f betweenValue) Between(start, end interface{}) RangeFilter {
-	f.GtePtr, f.LtePtr = start, end
-	return f
-}
-
-func (f betweenValue) Gt(value interface{}) RangeFilter {
-	f.GtPtr = value
-	return f
-}
-
-func (f betweenValue) Gte(value interface{}) RangeFilter {
-	f.GtePtr = value
-	return f
-}
-
-func (f betweenValue) Lt(value interface{}) RangeFilter {
-	f.LtPtr = value
-	return f
-}
-
-func (f betweenValue) Lte(value interface{}) RangeFilter {
-
-	f.LtePtr = value
-	return f
-}
-
-func (b between) MarshalJSON() ([]byte, error) {
-	// 注意不能直接marshal b，回递归交通
-
-	return json.Marshal(map[string]map[string]interface{}{
-		"range": {
-			b.name: b.betweenValue,
-		},
-	})
-}
-
 type wildCard struct {
 	name string
 	wildCardValue
@@ -159,49 +100,6 @@ type filter struct {
 
 func NewFilter() Filter {
 	return filter{}
-}
-
-func Term(field string, value interface{}) Filter { return filter{}.Term(field, value) }
-func Terms(field string, values interface{}) Filter {
-	return filter{}.Terms(field, values)
-}
-func TermsSingeItem(field string, value interface{}) Filter {
-	return filter{}.TermsSingeItem(field, value)
-}
-
-func Between(field string, start, end int64) Filter {
-	return filter{}.Between(field, start, end)
-}
-func Gt(field string, value int64) Filter              { return filter{}.Gt(field, value) }
-func Gte(field string, value int64) Filter             { return filter{}.Gte(field, value) }
-func Lt(field string, value int64) Filter              { return filter{}.Lt(field, value) }
-func Lte(field string, value int64) Filter             { return filter{}.Lte(field, value) }
-func Wildcard(field string, value string) Filter       { return filter{}.Wildcard(field, value) }
-func WildcardSuffix(field string, value string) Filter { return filter{}.WildcardSuffix(field, value) }
-func Bool(must, not, should, match Filter, adjustPureNegative bool) Filter {
-	return filter{}.BoolItem(must, not, should, match, adjustPureNegative)
-}
-
-// Range  range query. [start, end], start <= field <= end
-func Range(field string, start, end interface{}) Filter { return filter{}.Range(field, start, end) }
-
-// FromTo  range query. [from, to), from <= field < to
-func FromTo(field string, from, to interface{}) Filter { return filter{}.FromTo(field, from, to) }
-
-func NestedQuery(path string, must, not, should, match Filter) NestedFilter {
-	return esNested{}.Path(path).Must(must).Not(not).Should(should).Match(match)
-}
-
-func NewRangeFilter() RangeFilter {
-	return betweenValue{}
-}
-
-func Nested() NestedFilter {
-	return esNested{}
-}
-
-func BoolTrue(must, not, should, match Filter) Filter {
-	return filter{}.BoolItem(must, not, should, match, true)
 }
 
 func (f filter) Term(field string, value interface{}) Filter {
@@ -323,7 +221,14 @@ func (f filter) Result() []interface{} {
 	return f.condition
 }
 
+func (f filter) Append(filters ...Filter) Filter {
 
+	for _, filter := range filters {
+		f.condition = append(f.condition, filter.Result()...)
+	}
+
+	return f
+}
 
 type multiUpdate struct {
 	MFilter map[string]interface{}
@@ -354,56 +259,9 @@ func MultiUpdateFilter(filter, doc map[string]interface{}) MultiUpdate {
 	return multiUpdate{}.Filter(filter).Doc(doc)
 }
 
-type esNested struct {
-	NestedPath string        `json:"path"`
-	Query      esNestedQuery `json:"query"`
-}
-
-type esNestedQuery struct {
-	Bool esQueryBool `json:"bool"`
-}
-
-func (e esNested) Must(filters ...Filter) NestedFilter {
-	for _, filter := range filters {
-		e.Query.Bool.Must = append(e.Query.Bool.Must, filter.Result()...)
-	}
-	return e
-}
-
-func (e esNested) Should(filters ...Filter) NestedFilter {
-	for _, filter := range filters {
-		e.Query.Bool.Should = append(e.Query.Bool.Should, filter.Result()...)
-	}
-	return e
-}
-
-func (e esNested) Not(filters ...Filter) NestedFilter {
-	for _, filter := range filters {
-		e.Query.Bool.Not = append(e.Query.Bool.Not, filter.Result()...)
-	}
-	return e
-}
-
-func (e esNested) Match(filters ...Filter) NestedFilter {
-	for _, filter := range filters {
-		e.Query.Bool.Match = append(e.Query.Bool.Match, filter.Result()...)
-	}
-	return e
-}
-
-func (e esNested) Path(path string) NestedFilter {
-	e.NestedPath = path
-	return e
-}
-
-func (e esNested) Result() interface{} {
-	return map[string]interface{}{"nested": e}
-}
-
 var (
-	_ Agg          = (*agg)(nil)
-	_ Filter       = (*filter)(nil)
-	_ AggFilter    = (*aggFilter)(nil)
-	_ MultiUpdate  = (*multiUpdate)(nil)
-	_ NestedFilter = (*esNested)(nil)
+	_ Agg         = (*agg)(nil)
+	_ Filter      = (*filter)(nil)
+	_ AggFilter   = (*aggFilter)(nil)
+	_ MultiUpdate = (*multiUpdate)(nil)
 )

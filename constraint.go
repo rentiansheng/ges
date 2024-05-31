@@ -66,6 +66,7 @@ type Filter interface {
 	WildcardSuffix(field string, value string) Filter
 	BoolItem(must, not, should, match Filter, adjustPureNegative bool) Filter
 	Nested(nestedFilter NestedFilter) Filter
+	Append(filters ...Filter) Filter
 	Result() []interface{}
 }
 
