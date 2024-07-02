@@ -52,6 +52,7 @@ type Client interface {
 }
 
 type Filter interface {
+	Match(field string, value interface{}) Filter
 	Term(field string, value interface{}) Filter
 	Terms(field string, values interface{}) Filter
 	TermsSingeItem(field string, value interface{}) Filter
