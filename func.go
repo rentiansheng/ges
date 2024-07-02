@@ -1,13 +1,16 @@
 package ges
 
-/***************************
-    @author: tiansheng.ren
-    @date: 2024/5/29
-    @desc:
+/*
+**************************
 
-***************************/
+	@author: tiansheng.ren
+	@date: 2024/5/29
+	@desc:
 
-func Term(field string, value interface{}) Filter { return filter{}.Term(field, value) }
+**************************
+*/
+func Match(field string, value interface{}) Filter { return filter{}.Match(field, value) }
+func Term(field string, value interface{}) Filter  { return filter{}.Term(field, value) }
 func Terms(field string, values interface{}) Filter {
 	return filter{}.Terms(field, values)
 }

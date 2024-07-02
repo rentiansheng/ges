@@ -11,6 +11,19 @@ import (
 
 ***************************/
 
+type match struct {
+	name  string
+	value interface{}
+}
+
+func (t match) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]map[string]interface{}{
+		"match": {
+			t.name: t.value,
+		},
+	})
+}
+
 type term struct {
 	name  string
 	value interface{}
@@ -100,6 +113,11 @@ type filter struct {
 
 func NewFilter() Filter {
 	return filter{}
+}
+
+func (f filter) Match(field string, value interface{}) Filter {
+	f.condition = append(f.condition, match{field, value})
+	return f
 }
 
 func (f filter) Term(field string, value interface{}) Filter {
