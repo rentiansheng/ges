@@ -487,10 +487,25 @@ func (e es) Delete(ctx context.Context) error {
 }
 
 func (e es) Count(ctx context.Context) (uint64, error) {
-	result := make([]map[string]interface{}, 0)
 	e.size = 0
-	// TODO: use count api instead of search
-	return e.Search(ctx, &result)
+	queryBody, err := e.buildQuery(ctx)
+	if err != nil {
+		return 0, err
+	}
+	opts := []func(*esapi.CountRequest){
+		rawESClient.Count.WithIndex(e.indexName),
+		rawESClient.Count.WithContext(ctx),
+		rawESClient.Count.WithBody(queryBody),
+	}
+	res, err := rawESClient.Count(opts...)
+	if err != nil {
+		return 0, err
+	}
+	if res.IsError() {
+		return 0, fmt.Errorf(res.String())
+	}
+	defer res.Body.Close()
+	return e.parseCountRespResult(ctx, res.Body)
 }
 
 // Query raw dsl query
