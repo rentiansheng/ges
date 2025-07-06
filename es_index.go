@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/elastic/go-elasticsearch/v7"
 	"github.com/elastic/go-elasticsearch/v7/esapi"
 )
 
@@ -19,10 +20,11 @@ import (
 
 type esIndex struct {
 	name string
+	c    *elasticsearch.Client
 }
 
 func (e esIndex) Exists(ctx context.Context) (bool, error) {
-	res, err := rawESClient.Indices.Exists([]string{e.name})
+	res, err := e.c.Indices.Exists([]string{e.name})
 	if err != nil {
 		return false, err
 	}
@@ -47,7 +49,7 @@ func (e esIndex) Create(ctx context.Context, mapping IndexMeta) error {
 	if err := json.NewEncoder(body).Encode(mapping); err != nil {
 		return fmt.Errorf("index create mapping encode error. %s", err.Error())
 	}
-	res, err := rawESClient.Indices.Create(e.name, esapi.IndicesCreate.WithBody(nil, body))
+	res, err := e.c.Indices.Create(e.name, esapi.IndicesCreate.WithBody(nil, body))
 	if err != nil {
 		return fmt.Errorf("es client do error. %s", err.Error())
 	}
@@ -65,7 +67,7 @@ func (e esIndex) List(ctx context.Context) ([]error, error) {
 }
 
 func (e esIndex) Mapping(ctx context.Context) (map[string]indexMetaResp, error) {
-	res, err := rawESClient.Indices.Get([]string{e.name})
+	res, err := e.c.Indices.Get([]string{e.name})
 	if err != nil {
 		return nil, err
 	}

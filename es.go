@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/elastic/go-elasticsearch/v7"
 	"github.com/elastic/go-elasticsearch/v7/esapi"
 	"github.com/rentiansheng/mapper"
 )
@@ -33,6 +34,7 @@ type es struct {
 	cond               cond
 	agg                map[string]interface{}
 	adjustPureNegative bool
+	c                  *elasticsearch.Client
 }
 
 type cond struct {
@@ -200,28 +202,28 @@ func (e es) searchHelper(ctx context.Context) (*esapi.Response, error) {
 	}
 
 	searchOpts := []func(*esapi.SearchRequest){
-		rawESClient.Search.WithContext(ctx),
-		rawESClient.Search.WithIndex(e.indexName),
-		rawESClient.Search.WithSort(e.sorts...),
+		e.c.Search.WithContext(ctx),
+		e.c.Search.WithIndex(e.indexName),
+		e.c.Search.WithSort(e.sorts...),
 	}
 	if queryBody.Len() > 0 {
-		searchOpts = append(searchOpts, rawESClient.Search.WithBody(queryBody))
+		searchOpts = append(searchOpts, e.c.Search.WithBody(queryBody))
 
 	}
 	if e.isAgg {
-		searchOpts = append(searchOpts, rawESClient.Search.WithSize(0))
+		searchOpts = append(searchOpts, e.c.Search.WithSize(0))
 	} else {
-		searchOpts = append(searchOpts, rawESClient.Search.WithTrackTotalHits(true))
-		searchOpts = append(searchOpts, rawESClient.Search.WithSourceIncludes(e.fields...))
+		searchOpts = append(searchOpts, e.c.Search.WithTrackTotalHits(true))
+		searchOpts = append(searchOpts, e.c.Search.WithSourceIncludes(e.fields...))
 		if e.from != 0 {
-			searchOpts = append(searchOpts, rawESClient.Search.WithFrom(int(e.from)))
+			searchOpts = append(searchOpts, e.c.Search.WithFrom(int(e.from)))
 		}
 		if e.size != 0 {
-			searchOpts = append(searchOpts, rawESClient.Search.WithSize(int(e.size)))
+			searchOpts = append(searchOpts, e.c.Search.WithSize(int(e.size)))
 		}
 	}
 
-	return rawESClient.Search(
+	return e.c.Search(
 		searchOpts...,
 	)
 }
@@ -245,9 +247,9 @@ func (e es) buildQuery(ctx context.Context) (*bytes.Buffer, error) {
 }
 
 func (e es) TranslateSQL(ctx context.Context, sql string) ([]byte, error) {
-	res, err := rawESClient.SQL.Translate(
+	res, err := e.c.SQL.Translate(
 		strings.NewReader(fmt.Sprintf(`{"query": "%s"}`, sql)),
-		rawESClient.SQL.Translate.WithContext(ctx))
+		e.c.SQL.Translate.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +267,7 @@ func (e es) TranslateSQL(ctx context.Context, sql string) ([]byte, error) {
 
 func (e es) RawSQL(ctx context.Context, sql string, result interface{}) error {
 	//https://www.elastic.co/guide/en/elasticsearch/reference/current/sql-search-api.html
-	res, err := rawESClient.SQL.Query(strings.NewReader(fmt.Sprintf(`{"query":"%s"}`, sql)), rawESClient.SQL.Query.WithContext(ctx))
+	res, err := e.c.SQL.Query(strings.NewReader(fmt.Sprintf(`{"query":"%s"}`, sql)), e.c.SQL.Query.WithContext(ctx))
 	if err != nil {
 		return err
 	}
@@ -280,12 +282,12 @@ func (e es) RawSQL(ctx context.Context, sql string, result interface{}) error {
 
 func (e es) GetById(ctx context.Context, id string, result interface{}) error {
 
-	res, err := rawESClient.GetSource(
+	res, err := e.c.GetSource(
 		e.indexName,
 		id,
-		rawESClient.GetSource.WithContext(ctx),
-		rawESClient.GetSource.WithPretty(),
-		rawESClient.GetSource.WithSourceIncludes(e.fields...),
+		e.c.GetSource.WithContext(ctx),
+		e.c.GetSource.WithPretty(),
+		e.c.GetSource.WithSourceIncludes(e.fields...),
 	)
 	if err != nil {
 		return err
@@ -306,12 +308,12 @@ func (e es) UpdateById(ctx context.Context, id string, data interface{}) error {
 		return fmt.Errorf("update by id, marshal data  fail, err: %s", err.Error())
 	}
 
-	res, err := rawESClient.Bulk(
+	res, err := e.c.Bulk(
 		bufferBody,
-		rawESClient.Bulk.WithIndex(e.indexName),
-		rawESClient.Bulk.WithTimeout(5*time.Second),
-		rawESClient.Bulk.WithContext(ctx),
-		rawESClient.Bulk.WithRefresh("true"))
+		e.c.Bulk.WithIndex(e.indexName),
+		e.c.Bulk.WithTimeout(5*time.Second),
+		e.c.Bulk.WithContext(ctx),
+		e.c.Bulk.WithRefresh("true"))
 	if err != nil {
 		return err
 	}
@@ -343,11 +345,11 @@ func (e es) MUpdateById(ctx context.Context, docs ...Document) error {
 		}
 	}
 
-	res, err := rawESClient.Bulk(
+	res, err := e.c.Bulk(
 		bufferBody,
-		rawESClient.Bulk.WithTimeout(5*time.Second),
-		rawESClient.Bulk.WithContext(ctx),
-		rawESClient.Bulk.WithRefresh("true"))
+		e.c.Bulk.WithTimeout(5*time.Second),
+		e.c.Bulk.WithContext(ctx),
+		e.c.Bulk.WithRefresh("true"))
 	if err != nil {
 		return err
 	}
@@ -387,12 +389,12 @@ func (e es) MUpsertById(ctx context.Context, docs ...Document) error {
 
 	}
 
-	res, err := rawESClient.Bulk(
+	res, err := e.c.Bulk(
 		bufferBody,
-		rawESClient.Bulk.WithIndex(e.indexName),
-		rawESClient.Bulk.WithTimeout(5*time.Second),
-		rawESClient.Bulk.WithContext(ctx),
-		rawESClient.Bulk.WithRefresh("true"))
+		e.c.Bulk.WithIndex(e.indexName),
+		e.c.Bulk.WithTimeout(5*time.Second),
+		e.c.Bulk.WithContext(ctx),
+		e.c.Bulk.WithRefresh("true"))
 	if err != nil {
 		return err
 	}
@@ -438,12 +440,12 @@ func (e es) USave(ctx context.Context, docs ...Document) error {
 
 	}
 
-	res, err := rawESClient.Bulk(
+	res, err := e.c.Bulk(
 		bufferBody,
-		rawESClient.Bulk.WithIndex(e.indexName),
-		rawESClient.Bulk.WithTimeout(5*time.Second),
-		rawESClient.Bulk.WithContext(ctx),
-		rawESClient.Bulk.WithRefresh("true"))
+		e.c.Bulk.WithIndex(e.indexName),
+		e.c.Bulk.WithTimeout(5*time.Second),
+		e.c.Bulk.WithContext(ctx),
+		e.c.Bulk.WithRefresh("true"))
 	if err != nil {
 		return err
 	}
@@ -470,11 +472,11 @@ func (e es) Delete(ctx context.Context) error {
 		return err
 	}
 
-	res, err := rawESClient.DeleteByQuery(
+	res, err := e.c.DeleteByQuery(
 		[]string{e.indexName},
 		queryBody,
-		rawESClient.DeleteByQuery.WithTimeout(20*time.Second),
-		rawESClient.DeleteByQuery.WithRefresh(true),
+		e.c.DeleteByQuery.WithTimeout(20*time.Second),
+		e.c.DeleteByQuery.WithRefresh(true),
 	)
 	if err != nil {
 		return fmt.Errorf("unexpected error when get: %s", err)
@@ -493,11 +495,11 @@ func (e es) Count(ctx context.Context) (uint64, error) {
 		return 0, err
 	}
 	opts := []func(*esapi.CountRequest){
-		rawESClient.Count.WithIndex(e.indexName),
-		rawESClient.Count.WithContext(ctx),
-		rawESClient.Count.WithBody(queryBody),
+		e.c.Count.WithIndex(e.indexName),
+		e.c.Count.WithContext(ctx),
+		e.c.Count.WithBody(queryBody),
 	}
-	res, err := rawESClient.Count(opts...)
+	res, err := e.c.Count(opts...)
 	if err != nil {
 		return 0, err
 	}
@@ -515,11 +517,11 @@ func (e es) Query(ctx context.Context, raw interface{}, result interface{}) erro
 		return err
 	}
 	opts := []func(*esapi.SearchRequest){
-		rawESClient.Search.WithBody(body),
-		rawESClient.Search.WithContext(ctx),
-		rawESClient.Search.WithIndex(e.indexName),
+		e.c.Search.WithBody(body),
+		e.c.Search.WithContext(ctx),
+		e.c.Search.WithIndex(e.indexName),
 	}
-	res, err := rawESClient.Search(opts...)
+	res, err := e.c.Search(opts...)
 	if err != nil {
 		return err
 	}
@@ -543,10 +545,10 @@ func (e es) Save(ctx context.Context, datas ...interface{}) error {
 	}
 
 	opts := []func(request *esapi.BulkRequest){
-		rawESClient.Bulk.WithContext(ctx),
-		rawESClient.Bulk.WithIndex(e.indexName),
-		rawESClient.Bulk.WithRefresh("true"),
-		rawESClient.Bulk.WithTimeout(20 * time.Second),
+		e.c.Bulk.WithContext(ctx),
+		e.c.Bulk.WithIndex(e.indexName),
+		e.c.Bulk.WithRefresh("true"),
+		e.c.Bulk.WithTimeout(20 * time.Second),
 	}
 
 	length := len(datas)
@@ -572,7 +574,7 @@ func (e es) Save(ctx context.Context, datas ...interface{}) error {
 		if byteBody.Len() == 0 {
 			continue
 		}
-		res, err := rawESClient.Bulk(byteBody, opts...)
+		res, err := e.c.Bulk(byteBody, opts...)
 		if err != nil {
 			return err
 		}
@@ -589,16 +591,7 @@ func (e es) Save(ctx context.Context, datas ...interface{}) error {
 }
 
 func ES() Client {
-	return &es{
-		isAgg:     false,
-		sorts:     []string{},
-		fields:    nil,
-		indexName: "",
-		from:      0,
-		size:      0,
-		cond:      cond{},
-		agg:       make(map[string]interface{}, 0),
-	}
+	return newES(rawESClient)
 }
 
 func (e es) parseSearchRespResult(ctx context.Context, res *esapi.Response, results interface{}) (uint64, error) {
